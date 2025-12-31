@@ -1,11 +1,22 @@
 // components/Header.tsx
 import Link from 'next/link';
+import Image from 'next/image'; 
+
 
 const Header = () => {
   return (
     <header className="flex justify-between items-center py-6">
       <div className="flex items-center">
-        {/* Replace with your actual logo svg/image */}
+        {/* <div className="mr-4">
+          <Image 
+            src="/logo.png" 
+            alt="Trial Bridge Logo" 
+            width={300} 
+            height={200} 
+            className="rounded-full"
+          />
+        </div> */}
+
         <div className="font-bold text-2xl text-blue-900 flex items-center">
           <span className="text-green-500 mr-1">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
