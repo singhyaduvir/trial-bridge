@@ -4,6 +4,7 @@ import Image from 'next/image';
 
 
 const Header = () => {
+
   return (
     <header className="flex justify-between items-center py-6">
       <div className="flex items-center">

@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import HeroGallery from './HeroGallery'; // Import the new component
 
+
 const Hero = () => {
   return (
     <section className="flex flex-col-reverse md:flex-row items-center justify-between py-12 md:py-20 gap-8">
@@ -25,7 +26,9 @@ const Hero = () => {
       <div className="w-full md:w-1/2 flex justify-center md:justify-end">
         <HeroGallery />
       </div>
+      
     </section>
+    
   );
 };
 
