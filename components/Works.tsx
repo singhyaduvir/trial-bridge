@@ -312,3 +312,6 @@ Return ONLY the JSON object, no additional text.`
 };
 
 export default PDFParser;
+
+//OpenAPI from clinicalgrials.goc integration
+//access metadata for every available trial
