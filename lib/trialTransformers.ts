@@ -9,8 +9,8 @@ export type TransformedTrial = {
   phase: string;
   sponsor: string;
   location: string;
-  distance?: string; // Will need geolocation for this
-  matchScore?: number; // Calculated based on patient criteria
+  distance?: string;
+  matchScore: number; // Made required with default
   description: string;
   eligibilityCriteria: string[];
   duration: string;
@@ -74,19 +74,21 @@ export function transformClinicalTrialData(
       duration: duration,
       contactEmail: contactEmail,
       enrollmentStatus: status.overallStatus || 'Unknown',
-      requirements: [], // Not available in API, would need to be inferred or added separately
-      nextSteps: [], // Not available in API, would need to be added separately
+      matchScore: 0, // Default match score - will be calculated by matching algorithm
+      requirements: generateDefaultRequirements(design.studyType, phase),
+      nextSteps: generateDefaultNextSteps(),
     };
   });
 }
 
 function parseEligibilityCriteria(criteriaText: string): string[] {
-  // Simple parsing - split by common delimiters
-  // You might want to improve this based on actual API format
-  return criteriaText
-    .split(/\n|\r/)
-    .filter(line => line.trim().length > 0)
-    .slice(0, 10); // Limit to first 10 criteria
+  // Improved parsing - split by common delimiters and clean up
+  const lines = criteriaText
+    .split(/\n|\r|(?=Inclusion Criteria:)|(?=Exclusion Criteria:)/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0 && !line.match(/^(Inclusion|Exclusion) Criteria:/i));
+  
+  return lines.slice(0, 15); // Limit to first 15 criteria
 }
 
 function calculateDuration(startDate: string, endDate: string): string {
@@ -101,4 +103,27 @@ function calculateDuration(startDate: string, endDate: string): string {
     const remainingMonths = months % 12;
     return remainingMonths > 0 ? `${years} years, ${remainingMonths} months` : `${years} years`;
   }
+}
+
+function generateDefaultRequirements(studyType?: string, phase?: string): string[] {
+  const requirements = [
+    'Regular clinic visits as scheduled',
+    'Compliance with study protocol',
+    'Completion of required assessments',
+  ];
+  
+  if (studyType?.toLowerCase().includes('interventional')) {
+    requirements.push('Administration of study treatment');
+  }
+  
+  return requirements;
+}
+
+function generateDefaultNextSteps(): string[] {
+  return [
+    'Initial screening call with study coordinator',
+    'Review of medical records',
+    'In-person screening visit',
+    'Baseline assessments and testing',
+  ];
 }

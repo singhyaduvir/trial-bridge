@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useTrials } from '@/hooks/useTrials';
+import { TransformedTrial } from '@/lib/trialTransformers';
 
 type StudyStatus = 'recruitment' | 'phase-i' | 'phase-ii' | 'phase-iii' | 'analysis' | 'completed';
 
@@ -314,14 +316,77 @@ const PARTICIPANT_STATUS_COLORS: Record<Participant['status'], string> = {
   'withdrawn': 'bg-red-100 text-red-700'
 };
 
+// Helper function to map API status to StudyStatus
+function mapStatusToStudyStatus(enrollmentStatus: string, phase: string): StudyStatus {
+  const statusUpper = enrollmentStatus.toUpperCase();
+  if (statusUpper.includes('RECRUITING') || statusUpper.includes('NOT_YET_RECRUITING')) return 'recruitment';
+  if (phase.includes('Phase I') || phase.includes('PHASE1')) return 'phase-i';
+  if (phase.includes('Phase II') || phase.includes('PHASE2')) return 'phase-ii';
+  if (phase.includes('Phase III') || phase.includes('PHASE3')) return 'phase-iii';
+  if (statusUpper.includes('COMPLETED')) return 'completed';
+  if (statusUpper.includes('ACTIVE') && !statusUpper.includes('RECRUITING')) return 'analysis';
+  return 'recruitment';
+}
+
 export default function InvestigatorDashboard() {
-  const [selectedStudyId, setSelectedStudyId] = useState<string | null>(MOCK_STUDIES[0]?.id || null);
+  const [selectedStudyId, setSelectedStudyId] = useState<string | null>(null);
   const [expandedParticipantId, setExpandedParticipantId] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedStudy, setEditedStudy] = useState<Study | null>(null);
 
+  // Fetch studies from API
+  const { trials: apiTrials, loading, error } = useTrials({
+    status: 'RECRUITING', // You can filter by your investigator's studies
+  });
+
+  // Transform API trials to Study format, merging with mock participants
+  const transformedStudies: Study[] = apiTrials.map(trial => {
+    // Find matching mock study for participants data (in real app, this would come from your database)
+    const mockStudy = MOCK_STUDIES.find(m => m.id === trial.id);
+    
+    // Split eligibility criteria into inclusion/exclusion
+    const midPoint = Math.ceil(trial.eligibilityCriteria.length / 2);
+    const inclusionCriteria = trial.eligibilityCriteria.slice(0, midPoint);
+    const exclusionCriteria = trial.eligibilityCriteria.slice(midPoint);
+
+    return {
+      id: trial.id,
+      title: trial.title,
+      condition: trial.condition,
+      phase: trial.phase,
+      status: mapStatusToStudyStatus(trial.enrollmentStatus, trial.phase),
+      sponsor: trial.sponsor,
+      location: trial.location,
+      description: trial.description,
+      eligibilityCriteria: trial.eligibilityCriteria,
+      duration: trial.duration,
+      enrollmentTarget: mockStudy?.enrollmentTarget || 100, // Default if not in mock data
+      currentEnrollment: mockStudy?.currentEnrollment || 0, // Would come from your database
+      startDate: mockStudy?.startDate || '2024-01-01', // Would parse from API
+      expectedEndDate: mockStudy?.expectedEndDate || '2026-01-01', // Would calculate from API
+      participants: mockStudy?.participants || [], // Would come from your database
+      protocolDetails: trial.description, // Use description as protocol details
+      inclusionCriteria: mockStudy?.inclusionCriteria || inclusionCriteria,
+      exclusionCriteria: mockStudy?.exclusionCriteria || exclusionCriteria,
+      primaryEndpoints: mockStudy?.primaryEndpoints || [],
+      secondaryEndpoints: mockStudy?.secondaryEndpoints || [],
+      adverseEvents: mockStudy?.adverseEvents || 0,
+      seriousAdverseEvents: mockStudy?.seriousAdverseEvents || 0,
+    };
+  });
+
+  // Use transformed studies or fallback to mock if API fails
+  const studies = transformedStudies.length > 0 ? transformedStudies : MOCK_STUDIES;
+
+  // Set first study as selected when data loads
+  useEffect(() => {
+    if (studies.length > 0 && !selectedStudyId) {
+      setSelectedStudyId(studies[0].id);
+    }
+  }, [studies.length, selectedStudyId]);
+
   const selectedStudy = selectedStudyId 
-    ? (isEditMode && editedStudy ? editedStudy : MOCK_STUDIES.find(s => s.id === selectedStudyId))
+    ? (isEditMode && editedStudy ? editedStudy : studies.find(s => s.id === selectedStudyId))
     : null;
 
   const incomingApplications = selectedStudy?.participants.filter(p => p.status === 'screening') || [];
@@ -356,6 +421,23 @@ export default function InvestigatorDashboard() {
     setEditedStudy(null);
   };
 
+  // Show loading state
+  if (loading && transformedStudies.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading studies...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state (but still use mock data as fallback)
+  if (error && transformedStudies.length === 0) {
+    console.warn('Error loading studies from API, using mock data:', error);
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -365,7 +447,7 @@ export default function InvestigatorDashboard() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Investigator Dashboard</h1>
               <p className="text-sm text-gray-600 mt-1">
-                {MOCK_STUDIES.length} studies under your management
+                {studies.length} studies under your management
               </p>
             </div>
           </div>
@@ -381,7 +463,7 @@ export default function InvestigatorDashboard() {
                 <h2 className="text-sm font-semibold text-gray-900">Your Studies</h2>
               </div>
               <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
-                {MOCK_STUDIES.map((study) => {
+                {studies.map((study) => {
                   const isSelected = selectedStudyId === study.id;
                   const enrollmentPercentage = Math.round((study.currentEnrollment / study.enrollmentTarget) * 100);
                   

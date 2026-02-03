@@ -1,6 +1,11 @@
+// components/HealthcareProfessionalDashboard.tsx
+
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useTrials } from '@/hooks/useTrials';
+import { useTrialById } from '@/hooks/useTrialById';
+import { TransformedTrial } from '@/lib/trialTransformers';
 
 type Patient = {
   id: string;
@@ -18,20 +23,7 @@ type TrialAssignment = {
   status: 'pending' | 'enrolled' | 'screening';
 };
 
-type Trial = {
-  id: string;
-  title: string;
-  condition: string;
-  phase: string;
-  sponsor: string;
-  location: string;
-  matchScore: number;
-  description: string;
-  eligibilityCriteria: string[];
-  duration: string;
-  enrollmentStatus: string;
-};
-
+// Mock patients - in real app, this would come from your database
 const MOCK_PATIENTS: Patient[] = [
   {
     id: 'P001',
@@ -66,85 +58,6 @@ const MOCK_PATIENTS: Patient[] = [
   }
 ];
 
-const MOCK_TRIALS: Record<string, Trial> = {
-  'NCT05234567': {
-    id: 'NCT05234567',
-    title: 'Phase III Study of Novel Immunotherapy for Advanced Non-Small Cell Lung Cancer',
-    condition: 'Non-Small Cell Lung Cancer (NSCLC)',
-    phase: 'Phase III',
-    sponsor: 'Oncology Research Institute',
-    location: 'Massachusetts General Hospital, Boston, MA',
-    matchScore: 95,
-    description: 'This study evaluates the effectiveness of a novel immunotherapy drug in combination with standard chemotherapy for patients with advanced non-small cell lung cancer who have not received prior systemic therapy.',
-    eligibilityCriteria: [
-      'Age 18-75 years',
-      'Confirmed diagnosis of Stage III/IV NSCLC',
-      'ECOG performance status 0-1',
-      'No prior systemic therapy for advanced disease',
-      'Adequate organ function (specific lab values required)'
-    ],
-    duration: '18-24 months',
-    enrollmentStatus: 'Actively Recruiting'
-  },
-  'NCT05234568': {
-    id: 'NCT05234568',
-    title: 'Targeted Therapy Trial for EGFR-Positive Lung Cancer',
-    condition: 'EGFR+ Non-Small Cell Lung Cancer',
-    phase: 'Phase II',
-    sponsor: 'Dana-Farber Cancer Institute',
-    location: 'Dana-Farber Cancer Institute, Boston, MA',
-    matchScore: 92,
-    description: 'A study investigating a next-generation EGFR tyrosine kinase inhibitor in patients with EGFR-mutated non-small cell lung cancer who have progressed on prior EGFR-targeted therapy.',
-    eligibilityCriteria: [
-      'Age 18+ years',
-      'Documented EGFR mutation (exon 19 deletion or L858R)',
-      'Disease progression on prior EGFR TKI',
-      'Measurable disease per RECIST 1.1',
-      'Adequate hematologic and organ function'
-    ],
-    duration: '12-18 months',
-    enrollmentStatus: 'Actively Recruiting'
-  },
-  'NCT05234569': {
-    id: 'NCT05234569',
-    title: 'Immunotherapy Combination Study for Metastatic Melanoma',
-    condition: 'Metastatic Melanoma',
-    phase: 'Phase III',
-    sponsor: 'National Cancer Institute',
-    location: 'Beth Israel Deaconess Medical Center, Boston, MA',
-    matchScore: 88,
-    description: 'Evaluating dual checkpoint inhibitor therapy versus standard single-agent immunotherapy in treatment-naïve patients with metastatic melanoma.',
-    eligibilityCriteria: [
-      'Age 18+ years',
-      'Histologically confirmed metastatic melanoma',
-      'No prior systemic therapy for metastatic disease',
-      'ECOG performance status 0-2',
-      'No active autoimmune disease'
-    ],
-    duration: '24-36 months',
-    enrollmentStatus: 'Actively Recruiting'
-  },
-  'NCT05234570': {
-    id: 'NCT05234570',
-    title: 'HER2-Targeted Therapy for Advanced Breast Cancer',
-    condition: 'Breast Cancer',
-    phase: 'Phase II',
-    sponsor: 'Breast Cancer Research Foundation',
-    location: 'Brigham and Women\'s Hospital, Boston, MA',
-    matchScore: 85,
-    description: 'A clinical trial evaluating a novel HER2-targeted therapy in patients with HER2-positive advanced breast cancer.',
-    eligibilityCriteria: [
-      'Age 18+ years',
-      'HER2-positive breast cancer confirmed by IHC or FISH',
-      'Stage IV or recurrent disease',
-      'ECOG performance status 0-2',
-      'Adequate cardiac function'
-    ],
-    duration: '12-18 months',
-    enrollmentStatus: 'Actively Recruiting'
-  }
-};
-
 export default function HealthcareProfessionalDashboard() {
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(MOCK_PATIENTS[0]?.id || null);
   const [expandedPatientId, setExpandedPatientId] = useState<string | null>(MOCK_PATIENTS[0]?.id || null);
@@ -152,7 +65,17 @@ export default function HealthcareProfessionalDashboard() {
   const [isChatOpen, setIsChatOpen] = useState(false);
 
   const selectedPatient = MOCK_PATIENTS.find(p => p.id === selectedPatientId);
-  const selectedTrial = selectedTrialId ? MOCK_TRIALS[selectedTrialId] : null;
+  
+  // Fetch trial details when a trial is selected
+  const { trial: selectedTrial, loading: trialLoading } = useTrialById(selectedTrialId);
+  
+  // Set initial trial when patient is selected
+  React.useEffect(() => {
+    if (selectedPatient && selectedPatient.assignedTrials.length > 0 && !selectedTrialId) {
+      setSelectedTrialId(selectedPatient.assignedTrials[0].trialId);
+    }
+  }, [selectedPatient, selectedTrialId]);
+
   const patientTrialMatch = selectedPatient?.assignedTrials.find(t => t.trialId === selectedTrialId);
 
   const handlePatientClick = (patientId: string) => {
@@ -283,7 +206,12 @@ export default function HealthcareProfessionalDashboard() {
 
           {/* Middle Section - Trial Details */}
           <div className="flex-1">
-            {selectedTrial && selectedPatient && patientTrialMatch ? (
+            {trialLoading ? (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                <p className="mt-4 text-gray-600">Loading trial details...</p>
+              </div>
+            ) : selectedTrial && selectedPatient && patientTrialMatch ? (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                 {/* Trial Header */}
                 <div className="p-6 border-b border-gray-200">
