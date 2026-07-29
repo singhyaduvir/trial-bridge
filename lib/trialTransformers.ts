@@ -2,6 +2,14 @@
 
 import { ClinicalTrialResponse } from './clinicalTrialsApi';
 
+export type TrialEligibilityMeta = {
+  criteriaText: string;
+  minimumAge?: string;
+  maximumAge?: string;
+  sex?: string;
+  healthyVolunteers?: boolean | string;
+};
+
 export type TransformedTrial = {
   id: string;
   title: string;
@@ -10,9 +18,10 @@ export type TransformedTrial = {
   sponsor: string;
   location: string;
   distance?: string;
-  matchScore: number; // Made required with default
+  matchScore: number;
   description: string;
   eligibilityCriteria: string[];
+  eligibilityMeta?: TrialEligibilityMeta;
   duration: string;
   compensation?: string;
   requirements: string[];
@@ -20,11 +29,12 @@ export type TransformedTrial = {
   contactEmail: string;
   enrollmentStatus: string;
   spotsRemaining?: number;
+  matchReasons?: string[];
+  warnings?: string[];
 };
 
 export function transformClinicalTrialData(
   apiResponse: ClinicalTrialResponse,
-  userLocation?: { lat: number; lng: number }
 ): TransformedTrial[] {
   return apiResponse.studies.map((study) => {
     const protocol = study.protocolSection;
@@ -71,11 +81,18 @@ export function transformClinicalTrialData(
       location: location,
       description: description.briefSummary || description.detailedDescription || 'No description available',
       eligibilityCriteria: eligibilityCriteria,
+      eligibilityMeta: {
+        criteriaText: eligibility.eligibilityCriteria || '',
+        minimumAge: eligibility.minimumAge,
+        maximumAge: eligibility.maximumAge,
+        sex: eligibility.sex,
+        healthyVolunteers: eligibility.healthyVolunteers,
+      },
       duration: duration,
       contactEmail: contactEmail,
       enrollmentStatus: status.overallStatus || 'Unknown',
-      matchScore: 0, // Default match score - will be calculated by matching algorithm
-      requirements: generateDefaultRequirements(design.studyType, phase),
+      matchScore: 0,
+      requirements: generateDefaultRequirements(design.studyType),
       nextSteps: generateDefaultNextSteps(),
     };
   });
@@ -105,7 +122,7 @@ function calculateDuration(startDate: string, endDate: string): string {
   }
 }
 
-function generateDefaultRequirements(studyType?: string, phase?: string): string[] {
+function generateDefaultRequirements(studyType?: string): string[] {
   const requirements = [
     'Regular clinic visits as scheduled',
     'Compliance with study protocol',

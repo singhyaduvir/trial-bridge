@@ -5,13 +5,13 @@ interface DocumentMetadata {
   title?: string;
   date?: string;
   author?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface ParsedResult {
   document_type: string;
   metadata: DocumentMetadata;
-  key_parameters: Record<string, any>;
+  key_parameters: Record<string, unknown>;
   summary: string;
 }
 

@@ -1,14 +1,10 @@
-import Header from '@/components/Header';
-import TrialMatchingPage from '@/components/TrialsMatch';
-import TrailsMatch from '@/components/TrialsMatch';
+import TrialsMatchView from '@/components/TrialsMatchView';
+import PageShell from '@/components/layout/PageShell';
 
-export default function GetStartedPage() {
+export default function MatchesPage() {
   return (
-    <main className="min-h-screen bg-white">
-      <div className="mx-auto max-w-7xl px-6 lg:px-8">
-        <Header />
-      </div>
-      <TrialMatchingPage />
-    </main>
+    <PageShell fullWidth>
+      <TrialsMatchView />
+    </PageShell>
   );
 }
