@@ -12,7 +12,17 @@ export async function GET(request: Request) {
   const documents = await prisma.medicalDocument.findMany({
     where: patientId ? { patientId } : undefined,
     orderBy: { uploadedAt: 'desc' },
-  });
+  }) as Array<{
+    id: string;
+    patientId: string | null;
+    typeId: string;
+    label: string;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    storagePath: string;
+    uploadedAt: Date;
+  }>;
 
   const documentsWithUrls = await Promise.all(
     documents.map(async (doc) => {

@@ -36,7 +36,7 @@ export default function PatientDocumentsUpload() {
     try {
       const docs = await listMedicalDocuments(patientId ?? undefined);
       setDocuments(docs);
-    } catch (error) {
+    } catch {
       setError('Unable to load document list.');
     } finally {
       setLoaded(true);

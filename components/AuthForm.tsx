@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ROLES, type Role } from '@/lib/constants/roles';
 import {
@@ -33,7 +33,7 @@ const ROUTES_BY_ROLE: Record<Role, string> = {
 const inputClass = 'gemini-input';
 const ROLE_VALUES = Object.values(ROLES) as Role[];
 
-function getRoleFromSearchParams(searchParams: ReadonlyURLSearchParams | null): Role | undefined {
+function getRoleFromSearchParams(searchParams: { get(name: string): string | null } | null): Role | undefined {
   const roleValue = searchParams?.get('role');
   if (roleValue && ROLE_VALUES.includes(roleValue as Role)) {
     return roleValue as Role;
@@ -100,7 +100,7 @@ export default function AuthForm() {
     return patientType;
   };
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage(null);
     setStatusMessage(null);
