@@ -1,10 +1,13 @@
 import PageShell from '@/components/layout/PageShell';
 import PatientDashboard from '@/components/PatientDashboard';
+import RequireRole from '@/components/RequireRole';
 
 export default function PatientDashboardPage() {
   return (
-    <PageShell fullWidth>
-      <PatientDashboard />
-    </PageShell>
+    <RequireRole requiredRole="patient">
+      <PageShell fullWidth>
+        <PatientDashboard />
+      </PageShell>
+    </RequireRole>
   );
 }
