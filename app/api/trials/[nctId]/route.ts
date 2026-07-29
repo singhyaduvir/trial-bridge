@@ -6,10 +6,11 @@ import { transformClinicalTrialData } from '@/lib/trialTransformers';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { nctId: string } }
+  context: { params: Promise<{ nctId: string }> }
 ) {
   try {
-    const apiResponse = await getTrialById(params.nctId);
+    const { nctId } = await context.params;
+    const apiResponse = await getTrialById(nctId);
     const transformedData = transformClinicalTrialData(apiResponse);
     
     if (transformedData.length === 0) {

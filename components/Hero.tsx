@@ -1,6 +1,6 @@
 // components/Hero.tsx
 import Link from 'next/link';
-import HeroGallery from './HeroGallery'; // Import the new component
+import HeroGallery from './HeroGallery';
 
 
 const Hero = () => {
@@ -8,15 +8,15 @@ const Hero = () => {
     <section className="flex flex-col-reverse md:flex-row items-center justify-between py-12 md:py-20 gap-8">
       {/* Left Side: Text Content */}
       <div className="w-full md:w-1/2 flex flex-col items-start space-y-6">
-        <h1 className="text-4xl md:text-6xl font-bold text-blue-900 leading-tight">
-          Connecting you to tomorrow's medicine
+        <h1 className="gemini-heading-hero gemini-gradient-text">
+          Connecting you to tomorrow&apos;s medicine
         </h1>
-        <p className="text-lg text-gray-600 max-w-lg">
+        <p className="text-lg text-gemini-muted max-w-lg">
           TrialBridge matches patients to clinical trials tailored to their condition — unlocking personalized treatment options.
         </p>
         <Link 
-          href="/get-started" 
-          className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-full text-lg transition-colors shadow-lg"
+          href="/login?mode=signup" 
+          className="gemini-btn gemini-btn-pill"
         >
           GET STARTED
         </Link>

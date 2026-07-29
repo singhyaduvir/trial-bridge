@@ -1,33 +1,22 @@
-'use client';
+import { redirect } from 'next/navigation';
+import { ROLES } from '@/lib/constants/roles';
 
-import { useState } from 'react';
-import Header from '@/components/Header';
-import RoleSelection from '@/components/RoleSelection';
-import TrialEligibilityForm from '@/components/TrialEligibilityForm';
-import HealthcareProfessionalDashboard from '@/components/HealthcareProfessionalDashboard';
-import InvestigatorDashboard from '@/components/InvestigatorDashboard';
-
-export default function GetStartedPage() {
-  const [selectedRole, setSelectedRole] = useState<string | null>(null);
-
-  const handleRoleSelect = (role: string) => {
-    setSelectedRole(role);
+type Props = {
+  searchParams: {
+    role?: string;
   };
+};
 
-  return (
-    <main className="min-h-screen bg-white">
-      <div className="mx-auto max-w-7xl px-6 lg:px-8">
-        <Header />
-      </div>
-      {selectedRole === 'healthcare-professional' ? (
-        <HealthcareProfessionalDashboard />
-      ) : selectedRole === 'investigator' ? (
-        <InvestigatorDashboard />
-      ) : selectedRole ? (
-        <TrialEligibilityForm />
-      ) : (
-        <RoleSelection onRoleSelect={handleRoleSelect} />
-      )}
-    </main>
-  );
+const VALID_ROLES = Object.values(ROLES);
+
+export default function GetStartedPage({ searchParams }: Props) {
+  const role = VALID_ROLES.includes(searchParams.role as typeof VALID_ROLES[number])
+    ? searchParams.role
+    : undefined;
+
+  if (role) {
+    redirect(`/login?mode=signup&role=${role}`);
+  }
+
+  redirect('/login?mode=signup');
 }

@@ -28,7 +28,7 @@ export type ClinicalTrialResponse = {
       };
       eligibilityModule: {
         eligibilityCriteria: string;
-        healthyVolunteers: string;
+        healthyVolunteers?: boolean | string;
         sex: string;
         minimumAge: string;
         maximumAge: string;
@@ -72,10 +72,10 @@ export async function searchTrials(params: {
   const queryParams = new URLSearchParams();
   
   if (params.query) queryParams.append('query.cond', params.query);
-  if (params.condition) queryParams.append('filter.conditions', params.condition);
-  if (params.location) queryParams.append('filter.locations', params.location);
+  if (params.condition) queryParams.append('query.cond', params.condition);
+  if (params.location) queryParams.append('query.locn', params.location);
   if (params.status) queryParams.append('filter.overallStatus', params.status);
-  if (params.phase) queryParams.append('filter.phases', params.phase);
+  if (params.phase) queryParams.append('filter.phase', params.phase);
   if (params.pageSize) queryParams.append('pageSize', params.pageSize.toString());
   if (params.pageToken) queryParams.append('pageToken', params.pageToken);
 
