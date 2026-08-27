@@ -36,51 +36,54 @@ export type TransformedTrial = {
 export function transformClinicalTrialData(
   apiResponse: ClinicalTrialResponse,
 ): TransformedTrial[] {
-  return apiResponse.studies.map((study) => {
-    const protocol = study.protocolSection;
-    const identification = protocol.identificationModule;
-    const status = protocol.statusModule;
-    const design = protocol.designModule;
-    const conditions = protocol.conditionsModule;
-    const eligibility = protocol.eligibilityModule;
-    const contacts = protocol.contactsLocationsModule;
-    const description = protocol.descriptionModule;
-    const sponsor = protocol.sponsorCollaboratorsModule;
+  const studies = Array.isArray(apiResponse?.studies)
+    ? apiResponse.studies
+    : apiResponse?.protocolSection
+      ? [ { protocolSection: apiResponse.protocolSection } ]
+      : [];
 
-    // Extract eligibility criteria from text
+  return studies.map((study) => {
+    const protocol = study?.protocolSection ?? {};
+    const identification = protocol.identificationModule ?? {};
+    const status = protocol.statusModule ?? {};
+    const design = protocol.designModule ?? {};
+    const conditions = protocol.conditionsModule ?? {};
+    const eligibility = protocol.eligibilityModule ?? {};
+    const contacts = protocol.contactsLocationsModule ?? {};
+    const description = protocol.descriptionModule ?? {};
+    const sponsor = protocol.sponsorCollaboratorsModule ?? {};
+
     const eligibilityCriteria = eligibility.eligibilityCriteria
       ? parseEligibilityCriteria(eligibility.eligibilityCriteria)
       : [];
 
-    // Format location
     const location = contacts.locations?.[0]
-      ? `${contacts.locations[0].facility}, ${contacts.locations[0].city}, ${contacts.locations[0].state}`
+      ? [contacts.locations[0].facility, contacts.locations[0].city, contacts.locations[0].state]
+          .filter(Boolean)
+          .join(', ')
       : 'Location not specified';
 
-    // Format phase
     const phase = design.phase && design.phase.length > 0
       ? design.phase[0]
       : 'Not specified';
 
-    // Calculate duration
     const startDate = status.startDateStruct?.date;
-    const endDate = status.completionDateStruct?.date;
+    const endDate = status.completionDateStruct?.date ?? status.startDateStruct?.date;
     const duration = startDate && endDate
       ? calculateDuration(startDate, endDate)
       : 'Ongoing';
 
-    // Get contact email
     const contactEmail = contacts.centralContacts?.[0]?.email || 'Contact information not available';
 
     return {
-      id: identification.nctId,
-      title: identification.briefTitle || identification.officialTitle,
+      id: identification.nctId || 'Unknown',
+      title: identification.briefTitle || identification.officialTitle || 'Untitled trial',
       condition: conditions.conditions?.[0] || 'Not specified',
-      phase: phase,
+      phase,
       sponsor: sponsor.leadSponsor?.name || 'Not specified',
-      location: location,
+      location,
       description: description.briefSummary || description.detailedDescription || 'No description available',
-      eligibilityCriteria: eligibilityCriteria,
+      eligibilityCriteria,
       eligibilityMeta: {
         criteriaText: eligibility.eligibilityCriteria || '',
         minimumAge: eligibility.minimumAge,
@@ -88,8 +91,8 @@ export function transformClinicalTrialData(
         sex: eligibility.sex,
         healthyVolunteers: eligibility.healthyVolunteers,
       },
-      duration: duration,
-      contactEmail: contactEmail,
+      duration,
+      contactEmail,
       enrollmentStatus: status.overallStatus || 'Unknown',
       matchScore: 0,
       requirements: generateDefaultRequirements(design.studyType),

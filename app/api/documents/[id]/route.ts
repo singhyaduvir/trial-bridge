@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   createApiError,
@@ -33,9 +32,16 @@ export async function DELETE(
       return createApiError('Invalid patient identifier.', 400);
     }
 
-    const document = await prisma.medicalDocument.findFirst({
-      where: patientId ? { id, patientId } : { id },
-    });
+    let query = supabaseAdmin.from('medical_documents').select('*').eq('id', id);
+    if (patientId) {
+      query = query.eq('patient_id', patientId);
+    }
+
+    const { data: document, error: fetchError } = await query.maybeSingle();
+
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      throw new Error(fetchError.message);
+    }
 
     if (!document) {
       return createApiError('Document not found.', 404);
@@ -43,15 +49,20 @@ export async function DELETE(
 
     const { error: deleteError } = await supabaseAdmin.storage
       .from(STORAGE_BUCKET)
-      .remove([document.storagePath]);
+      .remove([document.storage_path]);
 
     if (deleteError) {
       return createApiError(deleteError.message, 502);
     }
 
-    await prisma.medicalDocument.delete({
-      where: { id },
-    });
+    const { error: rowDeleteError } = await supabaseAdmin
+      .from('medical_documents')
+      .delete()
+      .eq('id', id);
+
+    if (rowDeleteError) {
+      throw new Error(rowDeleteError.message);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

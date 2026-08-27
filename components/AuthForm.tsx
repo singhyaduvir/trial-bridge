@@ -130,6 +130,7 @@ export default function AuthForm() {
 
       const { data, error } = await signUpWithRole(email.trim(), password.trim(), role, selectedPatientType);
       if (error) {
+        setStatusMessage(null);
         setErrorMessage(error.message);
         setIsSubmitting(false);
         return;
@@ -154,6 +155,7 @@ export default function AuthForm() {
     setStatusMessage('Signing in...');
     const { data, error } = await signInWithPassword(email.trim(), password.trim());
     if (error) {
+      setStatusMessage(null);
       setErrorMessage(error.message);
       setIsSubmitting(false);
       return;
