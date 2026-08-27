@@ -2,17 +2,41 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTrialById } from '@/hooks/useTrialById';
-import { mockPatients } from '@/lib/mock/patient';
+import type { Patient } from '@/lib/mock/types';
 
 export default function HealthcareProfessionalDashboard() {
-  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(mockPatients[0]?.id || null);
-  const [expandedPatientId, setExpandedPatientId] = useState<string | null>(mockPatients[0]?.id || null);
-  const [selectedTrialId, setSelectedTrialId] = useState<string | null>(() => mockPatients[0]?.assignedTrials?.[0]?.trialId ?? null);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [expandedPatientId, setExpandedPatientId] = useState<string | null>(null);
+  const [selectedTrialId, setSelectedTrialId] = useState<string | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
 
-  const selectedPatient = mockPatients.find(p => p.id === selectedPatientId);
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        const res = await fetch('/api/sample-patients');
+        if (!res.ok) return;
+        const data: Patient[] = await res.json();
+        if (!mounted) return;
+        setPatients(data);
+        if (!selectedPatientId && data.length > 0) {
+          setSelectedPatientId(data[0].id);
+          setExpandedPatientId(data[0].id);
+          setSelectedTrialId(data[0].assignedTrials?.[0]?.trialId ?? null);
+        }
+      } catch (err) {
+        console.error('Failed to load sample patients', err);
+      }
+    }
+
+    load();
+    return () => { mounted = false; };
+  }, []);
+
+  const selectedPatient = patients.find((p) => p.id === selectedPatientId);
   
   // Fetch trial details when a trial is selected
   const { trial: selectedTrial, loading: trialLoading } = useTrialById(selectedTrialId);
@@ -23,7 +47,7 @@ export default function HealthcareProfessionalDashboard() {
     setSelectedPatientId(patientId);
     setExpandedPatientId(expandedPatientId === patientId ? null : patientId);
     // Select first trial if available
-    const patient = mockPatients.find(p => p.id === patientId);
+    const patient = patients.find((p) => p.id === patientId);
     if (patient && patient.assignedTrials.length > 0) {
       setSelectedTrialId(patient.assignedTrials[0].trialId);
     } else {
@@ -44,7 +68,7 @@ export default function HealthcareProfessionalDashboard() {
             <div>
               <h1 className="text-2xl font-bold text-gemini-primary">Patient Dashboard</h1>
               <p className="text-sm text-gemini-muted mt-1">
-                {mockPatients.length} patients under your care
+                {patients.length} patients under your care
               </p>
             </div>
           </div>
@@ -60,7 +84,7 @@ export default function HealthcareProfessionalDashboard() {
                 <h2 className="text-sm font-semibold text-gemini-primary">Your Patients</h2>
               </div>
               <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
-                {mockPatients.map((patient) => {
+                {patients.map((patient) => {
                   const isExpanded = expandedPatientId === patient.id;
                   const isSelected = selectedPatientId === patient.id;
                   

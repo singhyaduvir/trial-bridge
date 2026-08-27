@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { prisma } from '@/lib/prisma';
 import {
   createApiError,
   enforceRateLimit,
@@ -12,6 +11,20 @@ import {
 
 const STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET ?? 'medical-documents';
 const SIGNED_URL_EXPIRY_SECONDS = 60 * 60;
+
+function normalizeDocumentRow(row: any) {
+  return {
+    id: row.id,
+    patientId: row.patient_id ?? undefined,
+    typeId: row.type_id,
+    label: row.label,
+    fileName: row.file_name,
+    mimeType: row.mime_type,
+    sizeBytes: Number(row.size_bytes ?? 0),
+    storagePath: row.storage_path,
+    uploadedAt: new Date(row.uploaded_at ?? Date.now()),
+  };
+}
 
 export async function GET(request: NextRequest) {
   const rateLimitResponse = enforceRateLimit(request, 'documents');
@@ -27,40 +40,39 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const documents = await prisma.medicalDocument.findMany({
-      where: patientId ? { patientId } : undefined,
-      orderBy: { uploadedAt: 'desc' },
-    }) as Array<{
-      id: string;
-      patientId: string | null;
-      typeId: string;
-      label: string;
-      fileName: string;
-      mimeType: string;
-      sizeBytes: number;
-      storagePath: string;
-      uploadedAt: Date;
-    }>;
+    let query = supabaseAdmin.from('medical_documents').select('*');
 
+    if (patientId) {
+      query = query.eq('patient_id', patientId);
+    }
+
+    const { data: documents, error } = await query.order('uploaded_at', { ascending: false });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const rows = documents ?? [];
     const documentsWithUrls = await Promise.all(
-      documents.map(async (doc) => {
-        const { data, error } = await supabaseAdmin.storage
+      rows.map(async (doc) => {
+        const normalized = normalizeDocumentRow(doc);
+        const { data, error: signedUrlError } = await supabaseAdmin.storage
           .from(STORAGE_BUCKET)
-          .createSignedUrl(doc.storagePath, SIGNED_URL_EXPIRY_SECONDS);
+          .createSignedUrl(normalized.storagePath, SIGNED_URL_EXPIRY_SECONDS);
 
-        if (error) {
-          throw new Error(`Unable to generate download URL: ${error.message}`);
+        if (signedUrlError) {
+          throw new Error(`Unable to generate download URL: ${signedUrlError.message}`);
         }
 
         return {
-          id: doc.id,
-          patientId: doc.patientId ?? undefined,
-          typeId: doc.typeId,
-          label: doc.label,
-          fileName: doc.fileName,
-          mimeType: doc.mimeType,
-          sizeBytes: doc.sizeBytes,
-          uploadedAt: doc.uploadedAt.toISOString(),
+          id: normalized.id,
+          patientId: normalized.patientId,
+          typeId: normalized.typeId,
+          label: normalized.label,
+          fileName: normalized.fileName,
+          mimeType: normalized.mimeType,
+          sizeBytes: normalized.sizeBytes,
+          uploadedAt: normalized.uploadedAt.toISOString(),
           downloadUrl: data.signedUrl,
         };
       }),
@@ -131,17 +143,24 @@ export async function POST(request: NextRequest) {
       return createApiError(uploadError.message, 502);
     }
 
-    const document = await prisma.medicalDocument.create({
-      data: {
-        typeId,
+    const { data: document, error: insertError } = await supabaseAdmin
+      .from('medical_documents')
+      .insert({
+        type_id: typeId,
         label: label.trim(),
-        fileName: safeFileName,
-        mimeType,
-        sizeBytes: parsedSizeBytes,
-        storagePath,
-        patientId: patientId || undefined,
-      },
-    });
+        file_name: safeFileName,
+        mime_type: mimeType,
+        size_bytes: parsedSizeBytes,
+        storage_path: storagePath,
+        patient_id: patientId || null,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      await supabaseAdmin.storage.from(STORAGE_BUCKET).remove([storagePath]);
+      throw new Error(insertError.message);
+    }
 
     const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
       .from(STORAGE_BUCKET)
@@ -151,15 +170,17 @@ export async function POST(request: NextRequest) {
       return createApiError(signedUrlError.message, 502);
     }
 
+    const normalized = normalizeDocumentRow(document);
+
     return NextResponse.json({
-      id: document.id,
-      patientId: document.patientId ?? undefined,
-      typeId: document.typeId,
-      label: document.label,
-      fileName: document.fileName,
-      mimeType: document.mimeType,
-      sizeBytes: document.sizeBytes,
-      uploadedAt: document.uploadedAt.toISOString(),
+      id: normalized.id,
+      patientId: normalized.patientId,
+      typeId: normalized.typeId,
+      label: normalized.label,
+      fileName: normalized.fileName,
+      mimeType: normalized.mimeType,
+      sizeBytes: normalized.sizeBytes,
+      uploadedAt: normalized.uploadedAt.toISOString(),
       downloadUrl: signedUrlData.signedUrl,
     });
   } catch (error) {

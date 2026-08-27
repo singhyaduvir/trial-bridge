@@ -13,7 +13,7 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 ## Environment configuration
 
-Environment variables are required for database access, Supabase integration, and JWT auth.
+Environment variables are required for Supabase integration and auth.
 
 1. Copy `.env.local.example` to `.env.local`.
 2. Fill in your own values for the required secrets.
@@ -21,7 +21,6 @@ Environment variables are required for database access, Supabase integration, an
 
 Required variables:
 
-- `DATABASE_URL` — PostgreSQL connection string used by Prisma.
 - `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL for the browser client.
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase public anon key for client auth.
 - `SUPABASE_URL` — Supabase project URL for server-side admin calls.

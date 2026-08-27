@@ -2,61 +2,64 @@
 
 const API_BASE_URL = 'https://clinicaltrials.gov/api/v2';
 
-export type ClinicalTrialResponse = {
-  studies: Array<{
-    protocolSection: {
-      identificationModule: {
-        nctId: string;
-        briefTitle: string;
-        officialTitle: string;
+export type ClinicalTrialStudy = {
+  protocolSection: {
+    identificationModule?: {
+      nctId?: string;
+      briefTitle?: string;
+      officialTitle?: string;
+    };
+    statusModule?: {
+      overallStatus?: string;
+      startDateStruct?: {
+        date?: string;
       };
-      statusModule: {
-        overallStatus: string;
-        startDateStruct: {
-          date: string;
-        };
-        completionDateStruct?: {
-          date: string;
-        };
-      };
-      designModule: {
-        phase: string[];
-        studyType: string;
-      };
-      conditionsModule: {
-        conditions: string[];
-      };
-      eligibilityModule: {
-        eligibilityCriteria: string;
-        healthyVolunteers?: boolean | string;
-        sex: string;
-        minimumAge: string;
-        maximumAge: string;
-      };
-      contactsLocationsModule: {
-        centralContacts?: Array<{
-          name: string;
-          email: string;
-          phone: string;
-        }>;
-        locations?: Array<{
-          facility: string;
-          city: string;
-          state: string;
-          country: string;
-        }>;
-      };
-      descriptionModule: {
-        briefSummary: string;
-        detailedDescription: string;
-      };
-      sponsorCollaboratorsModule: {
-        leadSponsor: {
-          name: string;
-        };
+      completionDateStruct?: {
+        date?: string;
       };
     };
-  }>;
+    designModule?: {
+      phase?: string[];
+      studyType?: string;
+    };
+    conditionsModule?: {
+      conditions?: string[];
+    };
+    eligibilityModule?: {
+      eligibilityCriteria?: string;
+      healthyVolunteers?: boolean | string;
+      sex?: string;
+      minimumAge?: string;
+      maximumAge?: string;
+    };
+    contactsLocationsModule?: {
+      centralContacts?: Array<{
+        name?: string;
+        email?: string;
+        phone?: string;
+      }>;
+      locations?: Array<{
+        facility?: string;
+        city?: string;
+        state?: string;
+        country?: string;
+      }>;
+    };
+    descriptionModule?: {
+      briefSummary?: string;
+      detailedDescription?: string;
+    };
+    sponsorCollaboratorsModule?: {
+      leadSponsor?: {
+        name?: string;
+      };
+    };
+  };
+};
+
+export type ClinicalTrialResponse = {
+  studies?: ClinicalTrialStudy[];
+  protocolSection?: ClinicalTrialStudy['protocolSection'];
   nextPageToken?: string;
 };
 
