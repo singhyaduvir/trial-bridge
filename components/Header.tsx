@@ -6,19 +6,25 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardNavLink from '@/components/DashboardNavLink';
 import { getCurrentUserProfile, signOut } from '@/lib/auth/supabase';
-import { clearAuthStorage } from '@/lib/auth/storage';
+import { clearAuthStorage, loadUserRole } from '@/lib/auth/storage';
+import { getDashboardRouteForRole } from '@/lib/constants/roles';
 
 const Header = () => {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [dashboardHref, setDashboardHref] = useState('/patient/dashboard');
 
   useEffect(() => {
     let active = true;
 
     async function checkAuthState() {
+      const storedRole = loadUserRole();
       const { data } = await getCurrentUserProfile();
       if (!active) return;
+
+      const resolvedRole = data?.user?.user_metadata?.role ?? storedRole;
       setIsAuthenticated(Boolean(data?.user));
+      setDashboardHref(getDashboardRouteForRole(resolvedRole));
     }
 
     void checkAuthState();
@@ -38,6 +44,7 @@ const Header = () => {
 
     clearAuthStorage();
     setIsAuthenticated(false);
+    setDashboardHref('/patient/dashboard');
     router.push('/login');
     router.refresh();
   };
@@ -66,13 +73,16 @@ const Header = () => {
         <Link href="/about" className="gemini-nav-link">About</Link>
 
         {isAuthenticated ? (
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="gemini-nav-link cursor-pointer border-0 bg-transparent p-0"
-          >
-            Log out
-          </button>
+          <>
+            <Link href={dashboardHref} className="gemini-nav-link">Go to Dashboard</Link>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="gemini-nav-link cursor-pointer border-0 bg-transparent p-0"
+            >
+              Log out
+            </button>
+          </>
         ) : (
           <>
             <Link href="/login?mode=signup" className="gemini-nav-link">Get Started</Link>
