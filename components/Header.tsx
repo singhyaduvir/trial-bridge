@@ -52,18 +52,17 @@ const Header = () => {
   return (
     <header className="flex justify-between items-center py-6">
       <div className="flex items-center">
-        <div className="mr-4 gemini-brand-icon">
+        {/* Keep the wrapper plain so any brand CSS won't add a colored background */}
+        <div className="mr-4">
           <Image
-            src="/SeparateLogo.png"
-            alt="Trial Bridge Logo"
-            width={75}
-            height={75}
-            className="rounded-full bg-gemini-canvas"
+            src="/bifrost_logo.svg"
+            alt="Bifrost Logo"
+            width={350}
+            height={350}
+            // show the SVG as-is with transparent background
+            className="block bg-transparent"
+            style={{ background: 'transparent', boxShadow: 'none' }}
           />
-        </div>
-
-        <div className="font-bold text-3xl flex items-center gemini-gradient-text">
-          Bifrost
         </div>
       </div>
       <nav className="hidden md:flex items-center space-x-8 font-medium">
