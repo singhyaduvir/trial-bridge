@@ -3,9 +3,9 @@ import Image from 'next/image';
 
 const HeroGallery = () => {
   const galleryItems = [
-    { id: 1, src: '/patient-care.png', caption: 'Personalized Matching' },
-    { id: 2, src: '/samples.png', caption: 'Advanced Research' },
-    { id: 3, src: '/after-care.png', caption: 'Success Stories' },
+    { id: 1, src: '/AdobeStock_503835299-1-scaled.jpeg', caption: 'Personalized Matching' },
+    { id: 2, src: '/shutterstock_1924512614.jpg', caption: 'Advanced Research' },
+    { id: 3, src: '/patient-hospital.jpg', caption: 'Success Stories' },
   ];
 
   return (
