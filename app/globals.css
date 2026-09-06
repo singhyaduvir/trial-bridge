@@ -126,6 +126,16 @@ body {
   line-height: 1.15;
 }
 
+.hero-trial-journey-font {
+  font-family: "Newsreader", Georgia, serif;
+}
+
+.hero-trial-journey-description {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+
 .gemini-heading-lg {
   font-weight: 400;
   letter-spacing: -0.02em;

@@ -57,11 +57,11 @@ const Hero = () => {
           </>
         ) : (
           <>
-            <h1 className="gemini-heading-hero gemini-gradient-text">
+            <h1 className="gemini-heading-hero hero-trial-journey-font gemini-gradient-text">
               Connecting you to tomorrow&apos;s medicine
             </h1>
-            <p className="text-lg text-gemini-muted max-w-lg">
-              TrialBridge matches patients to clinical trials tailored to their condition — unlocking personalized treatment options.
+            <p className="hero-trial-journey-description text-gemini-muted max-w-lg">
+              The Bifrost connects patients, doctors, and clinical trial investigators. All via one, unified communication platform. The only solution that you, your trial, or your patient will ever need.
             </p>
             <Link
               href={isAuthenticated ? dashboardHref : '/login?mode=signup'}
