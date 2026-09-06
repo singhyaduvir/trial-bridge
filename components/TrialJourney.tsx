@@ -1,479 +1,350 @@
-'use client';
+"use client";
 
-/**
- * TrialJourney
- * ------------------------------------------------------------------
- * Scroll-scrubbed visualization of a sample moving through
- * formulation -> incubation -> microscopy.
- *
- * See repository prompt for full documentation and integration notes.
- */
-
-import { useEffect, useId, useRef } from 'react';
-import anime from 'animejs';
+import React, { useEffect, useRef, useState } from 'react';
 
 type PhaseColor = 'teal' | 'amber' | 'violet';
 
-export interface TrialJourneyPhase {
+interface Phase {
   tag: string;
   title: string;
   description: string;
   color: PhaseColor;
 }
 
-export interface TrialJourneyProps {
-  className?: string;
-  sampleId?: string;
-  phases?: TrialJourneyPhase[];
-}
-
-const DEFAULT_PHASES: TrialJourneyPhase[] = [
-  {
-    tag: '01 — FORMULATION',
-    title: 'Solvents are combined into a single working solution.',
-    description:
-      'Three components are metered directly into the vial and allowed to reach a stable, homogeneous mixture.',
-    color: 'teal',
-  },
-  {
-    tag: '02 — TRANSFER',
-    title: 'The vial is handed into incubation.',
-    description:
-      'A robotic arm grips the sealed sample directly while the incubator chamber closes around it.',
-    color: 'teal',
-  },
-  {
-    tag: '03 — INCUBATION',
-    title: 'Conditions are held steady while the culture develops.',
-    description:
-      'Temperature and humidity stay fixed inside the chamber as the sample is monitored for growth.',
-    color: 'amber',
-  },
-  {
-    tag: '04 — RETRIEVAL',
-    title: 'A second arm hands the sample to analysis.',
-    description:
-      'The vial is lifted directly from the chamber as the microscope stage moves into place beneath it.',
-    color: 'amber',
-  },
-  {
-    tag: '05 — ANALYSIS',
-    title: 'The objective adjusts until the sample resolves.',
-    description:
-      'Magnification and focus are brought into alignment, and the result is logged against the trial record.',
-    color: 'violet',
-  },
+const PHASES: Phase[] = [
+  { tag: '01 — BUILD', title: 'Connect with your medical team.', description: 'Find the medical professional responsible for your care.', color: 'teal' },
+  { tag: '02 — TRANSFER', title: 'Complete your eligibility profile.', description: 'Fill in your medical information and values or submit your medical documents to have us do it for you.', color: 'teal' },
+  { tag: '03 — MATCHING', title: 'Eligible Trial Matching.', description: 'Your profile is matched with eligible trials and given scores depending on your criteria.', color: 'amber' },
+  { tag: '04 — APPLICATION', title: 'Submit Informed Application.', description: 'You may consult with your medical team about the matching criteria for the trial and submit an application with your profile to the trial.', color: 'amber' },
+  { tag: '05 — TRACKING', title: 'One unified dashboard to track trials, patients, and outcomes.', description: 'Your application and patients are tracked on your dashboard giving you access to all relevant information to drive your trial outcomes forward.', color: 'violet' },
 ];
 
-const PHASE_COLOR_VAR: Record<PhaseColor, string> = {
-  teal: 'var(--tj-teal)',
-  amber: 'var(--tj-amber)',
-  violet: 'var(--tj-violet)',
+const COLOR_HEX: Record<PhaseColor, string> = {
+  teal: '#0E7C7B',
+  amber: '#C3781F',
+  violet: '#6E4CC9',
 };
 
-const STAGE_X = 450;
-const STAGE_Y = 400;
-const ARM1_PIVOT = { x: 400, y: 250 };
-const ARM2_PIVOT = { x: 500, y: 250 };
-const ARM1_ANGLE = (Math.atan2(STAGE_Y - ARM1_PIVOT.y, STAGE_X - ARM1_PIVOT.x) * 180) / Math.PI;
-const ARM2_ANGLE = (Math.atan2(STAGE_Y - ARM2_PIVOT.y, STAGE_X - ARM2_PIVOT.x) * 180) / Math.PI;
-const PARK_ANGLE = -90;
+function hexToRgb(hex: string) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
 
-export default function TrialJourney({
-  className,
-  sampleId = 'TRL-0192',
-  phases = DEFAULT_PHASES,
-}: TrialJourneyProps) {
-  const uid = useId().replace(/:/g, '');
+function hexToRgba(hex: string, alpha: number) {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const copyRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const readoutPhaseRef = useRef<HTMLSpanElement>(null);
-  const readoutPctRef = useRef<HTMLSpanElement>(null);
-  const readoutRootRef = useRef<HTMLDivElement>(null);
+function lerpColor(a: string, b: string, t: number) {
+  const [ar, ag, ab] = hexToRgb(a);
+  const [br, bg, bb] = hexToRgb(b);
+  return `rgb(${Math.round(ar + (br - ar) * t)}, ${Math.round(ag + (bg - ag) * t)}, ${Math.round(ab + (bb - ab) * t)})`;
+}
 
-  const els = useRef<Record<string, SVGGraphicsElement | null>>({});
-  const setEl = (key: string) => (node: SVGGraphicsElement | null) => {
-    els.current[key] = node;
-  };
+function clamp(v: number, min: number, max: number) { return Math.min(max, Math.max(min, v)); }
 
-  const timelineRef = useRef<any | null>(null);
+function seeded(seed: number) {
+  let s = seed;
+  return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+}
+
+export default function TrialJourney() {
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const railRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [active, setActive] = useState(0);
 
   useEffect(() => {
-    const tickGroup = els.current.tickGroup;
-    if (tickGroup && tickGroup.childElementCount === 0) {
-      const cx = STAGE_X,
-        cy = STAGE_Y,
-        rOuter = 260,
-        rInner = 246;
-      for (let i = 0; i < 72; i++) {
-        const a = (i / 72) * Math.PI * 2;
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', String(cx + Math.cos(a) * rInner));
-        line.setAttribute('y1', String(cy + Math.sin(a) * rInner));
-        line.setAttribute('x2', String(cx + Math.cos(a) * rOuter));
-        line.setAttribute('y2', String(cy + Math.sin(a) * rOuter));
-        tickGroup.appendChild(line);
-      }
+    const PH = PHASES;
+    const contentEl = contentRef.current!;
+    const railEl = railRef.current!;
+    // build content and rail ticks via React render (JSX) — these refs exist
+    // Canvas scene
+    const canvas = canvasRef.current!;
+    const ctx = canvas.getContext('2d')!;
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const count = PH.length;
+    const rand = seeded(42);
+
+    let width = 0, height = 0, dpr = 1;
+    let nodes: any[] = [];
+    let ambient: any[] = [];
+    const trail: { x: number; y: number }[] = [];
+
+    function buildScene() {
+      const rect = canvas.getBoundingClientRect();
+      width = rect.width;
+      height = rect.height;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.max(1, Math.floor(width * dpr));
+      canvas.height = Math.max(1, Math.floor(height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      nodes = PH.map((phase, i) => {
+        const t = count === 1 ? 0.5 : i / (count - 1);
+        const sway = Math.sin(t * Math.PI * 1.4) * 0.16;
+        const dendrites = Array.from({ length: 5 + Math.floor(rand() * 3) }).map(() => ({
+          angle: rand() * Math.PI * 2,
+          length: 18 + rand() * 26,
+          wobble: rand() * Math.PI * 2,
+        }));
+        return { x: 0.5 + sway, y: 0.1 + t * 0.8, color: COLOR_HEX[phase.color], dendrites };
+      });
+
+      ambient = Array.from({ length: 46 }).map(() => ({ x: rand(), y: rand(), r: 0.6 + rand() * 1.4, phase: rand() * Math.PI * 2, speed: 0.2 + rand() * 0.4 }));
     }
 
-    const e = els.current;
-    const tl = anime.timeline({ autoplay: false, easing: 'easeInOutQuad' });
+    buildScene();
 
-    tl.add({ targets: e.mixRig, translateY: [-40, 0], opacity: [0, 1], duration: 250 }, 0);
-    tl.add({ targets: e.vialGroup, opacity: [0, 1], duration: 200 }, 0);
-    // droplets travel further to reach the lowered vial mouth
-    tl.add({ targets: e.drop1, translateY: [0, 130], opacity: [0, 1, 0], duration: 300 }, 150);
-    tl.add({ targets: e.drop2, translateY: [0, 130], opacity: [0, 1, 0], duration: 300 }, 330);
-    tl.add({ targets: e.drop3, translateY: [0, 130], opacity: [0, 1, 0], duration: 300 }, 510);
-    tl.add({ targets: e.liquidRect, y: [90, 8], height: [0, 82], duration: 650, easing: 'easeOutQuad' }, 250);
-    tl.add({ targets: e.bub1, translateY: [0, -28], opacity: [0, 0.8, 0], duration: 400 }, 500);
-    tl.add({ targets: e.bub2, translateY: [0, -24], opacity: [0, 0.8, 0], duration: 400 }, 600);
-    tl.add({ targets: e.bub3, translateY: [0, -26], opacity: [0, 0.8, 0], duration: 400 }, 700);
-    tl.add({ targets: e.vialCap, opacity: [0, 1], scale: [0.5, 1], duration: 200 }, 800);
-    tl.add({ targets: e.mixRig, translateY: [0, -55], opacity: [1, 0], duration: 250 }, 800);
+    let rafId = 0;
+    let lastNow = 0;
+    const progressState = { value: 0 };
 
-    tl.add({ targets: e.arm1seg, rotate: [PARK_ANGLE, ARM1_ANGLE], duration: 320 }, 950);
-    tl.add({ targets: e.arm1gripper, rotate: [0, 14], duration: 150 }, 1270);
-    tl.add({ targets: e.incubatorGroup, translateX: [260, 0], duration: 480, easing: 'easeInOutQuad' }, 1300);
-    tl.add({ targets: e.arm1gripper, rotate: [14, 0], duration: 150 }, 1780);
-    tl.add({ targets: e.arm1seg, rotate: [ARM1_ANGLE, PARK_ANGLE], duration: 320 }, 1780);
-    tl.add({ targets: e.incDoor, height: [0, 160], duration: 260 }, 2100);
+    function pointAt(fraction: number) {
+      const f = clamp(fraction, 0, count - 1);
+      const i0 = Math.floor(f);
+      const i1 = Math.min(i0 + 1, count - 1);
+      const local = f - i0;
+      const a = nodes[i0], b = nodes[i1];
+      return { x: (a.x + (b.x - a.x) * local) * width, y: (a.y + (b.y - a.y) * local) * height };
+    }
 
-    tl.add({ targets: e.incubatorGlow, opacity: [0, 0.9, 0.5, 0.9, 0.4], duration: 700 }, 2400);
-    tl.add({ targets: e.cult1, opacity: [0, 1], scale: [0.4, 1], duration: 200 }, 2450);
-    tl.add({ targets: e.cult2, opacity: [0, 1], scale: [0.4, 1], duration: 200 }, 2550);
-    tl.add({ targets: e.cult3, opacity: [0, 1], scale: [0.4, 1], duration: 200 }, 2650);
-    tl.add({ targets: e.cult4, opacity: [0, 1], scale: [0.4, 1], duration: 200 }, 2750);
-    tl.add({ targets: e.incDoor, height: [160, 0], duration: 260 }, 2900);
-    tl.add({ targets: e.incubatorGlow, opacity: [0.4, 0], duration: 250 }, 2900);
+    function draw(now: number) {
+      lastNow = now;
+      ctx.clearRect(0, 0, width, height);
+      const progress = progressState.value;
+      // ambient
+      ctx.save();
+      for (const dot of ambient) {
+        const drift = prefersReducedMotion ? 0 : Math.sin(now * 0.0005 * dot.speed + dot.phase);
+        const x = dot.x * width;
+        const y = dot.y * height + drift * 4;
+        ctx.beginPath();
+        ctx.fillStyle = 'rgba(20, 24, 27, 0.10)';
+        ctx.arc(x, y, dot.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
 
-    tl.add({ targets: e.arm2seg, rotate: [PARK_ANGLE, ARM2_ANGLE], duration: 320 }, 2950);
-    tl.add({ targets: e.arm2gripper, rotate: [0, -14], duration: 150 }, 3270);
-    tl.add({ targets: e.incubatorGroup, translateX: [0, 260], duration: 480, easing: 'easeInOutQuad' }, 3300);
-    tl.add({ targets: e.microscopeGroup, translateX: [-260, 0], duration: 480, easing: 'easeInOutQuad' }, 3300);
-    tl.add({ targets: e.arm2gripper, rotate: [-14, 0], duration: 150 }, 3780);
-    tl.add({ targets: e.arm2seg, rotate: [ARM2_ANGLE, PARK_ANGLE], duration: 320 }, 3780);
+      // spine
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      const steps = 160;
+      for (let s = 0; s < steps; s++) {
+        const t0 = (s / steps) * (count - 1);
+        const t1 = ((s + 1) / steps) * (count - 1);
+        if (t0 / (count - 1) > progress / (count - 1)) break;
+        const p0 = pointAt(t0);
+        const p1 = pointAt(t1);
+        const segIndex = Math.min(Math.floor(t0), count - 2);
+        const segLocal = t0 - segIndex;
+        const col = lerpColor(nodes[segIndex].color, nodes[Math.min(segIndex + 1, count - 1)].color, segLocal);
+        ctx.strokeStyle = col;
+        ctx.globalAlpha = 0.55;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.stroke();
+      }
 
-    tl.add({ targets: e.turret, rotate: [0, 55], duration: 350 }, 4050);
-    tl.add({ targets: e.focusRing1, opacity: [0, 0.6, 0], r: [40, 14], duration: 450 }, 4150);
-    tl.add({ targets: e.focusRing2, opacity: [0, 0.4, 0], r: [55, 26], duration: 450 }, 4300);
-    tl.add({ targets: e.turret, rotate: [55, 20], duration: 350 }, 4500);
-    tl.add({ targets: e.focusRing1, opacity: [0, 0.7, 0], r: [30, 18], duration: 450 }, 4600);
-    tl.add({ targets: e.vialGroup, scale: [1, 1, 1.04], duration: 400, easing: 'easeInOutSine' }, 4750);
+      // dormant continuation
+      ctx.strokeStyle = '#C9CDCE';
+      ctx.globalAlpha = 0.4;
+      ctx.setLineDash([1, 7]);
+      ctx.beginPath();
+      const startAhead = pointAt(Math.max(progress, 0));
+      ctx.moveTo(startAhead.x, startAhead.y);
+      for (let s = 1; s <= steps; s++) {
+        const t = (s / steps) * (count - 1);
+        if (t < progress) continue;
+        const p = pointAt(t);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
 
-    timelineRef.current = tl;
+      // nodes + dendrites
+      nodes.forEach((node, i) => {
+        const activation = clamp(1 - Math.abs(progress - i), 0, 1);
+        const x = node.x * width, y = node.y * height;
+        const pulse = prefersReducedMotion ? 0 : Math.sin(now * 0.004 + i) * 0.5 + 0.5;
 
-    return () => {
-      timelineRef.current = null;
-    };
-  }, []);
+        ctx.save();
+        node.dendrites.forEach((d: any) => {
+          const reach = d.length * (0.35 + activation * 0.9);
+          const wob = prefersReducedMotion ? 0 : Math.sin(now * 0.002 + d.wobble) * 3;
+          const ex = x + Math.cos(d.angle) * (reach + wob);
+          const ey = y + Math.sin(d.angle) * (reach + wob);
+          ctx.strokeStyle = activation > 0.05 ? node.color : '#E3E1DA';
+          ctx.globalAlpha = 0.18 + activation * 0.4;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(ex, ey);
+          ctx.stroke();
+          if (activation > 0.15) {
+            ctx.beginPath();
+            ctx.fillStyle = node.color;
+            ctx.globalAlpha = activation * 0.6;
+            ctx.arc(ex, ey, 1.4, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        });
 
-  useEffect(() => {
-    const CIRC = 2 * Math.PI * 260;
-    let ticking = false;
+        const glowR = 14 + activation * 22 + (prefersReducedMotion ? 0 : pulse * 4 * activation);
+        const gradient = ctx.createRadialGradient(x, y, 0, x, y, glowR);
+        gradient.addColorStop(0, node.color);
+        gradient.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.globalAlpha = 0.35 * Math.max(activation, 0.12);
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(x, y, glowR, 0, Math.PI * 2);
+        ctx.fill();
 
-    const render = () => {
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = activation > 0.05 ? node.color : '#C9CDCE';
+        ctx.beginPath();
+        ctx.arc(x, y, 4 + activation * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.stroke();
+        ctx.restore();
+      });
+
+      // traveling signal + trail
+      const head = pointAt(progress);
+      const headColor = lerpColor(nodes[Math.min(Math.floor(progress), count - 1)].color, nodes[Math.min(Math.ceil(progress), count - 1)].color, progress % 1);
+      trail.push({ x: head.x, y: head.y });
+      if (trail.length > 24) trail.shift();
+      ctx.save();
+      trail.forEach((p, idx) => {
+        const lifeFrac = idx / trail.length;
+        ctx.globalAlpha = lifeFrac * 0.5;
+        ctx.fillStyle = headColor;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 1 + lifeFrac * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      const headGlow = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, 16);
+      headGlow.addColorStop(0, 'rgba(255,255,255,0.9)');
+      headGlow.addColorStop(0.4, headColor);
+      headGlow.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = headGlow;
+      ctx.beginPath();
+      ctx.arc(head.x, head.y, 16, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath();
+      ctx.arc(head.x, head.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function loop(now: number) {
+      draw(now);
+      rafId = requestAnimationFrame(loop);
+    }
+
+    function onResize() {
+      buildScene();
+    }
+
+    // set wrapper height
+      if (wrapperRef.current) wrapperRef.current.style.height = `${PH.length * 80}vh`;
+
+    // scroll handling
+    function updateProgress() {
       const wrapper = wrapperRef.current;
-      const tl = timelineRef.current;
-      const progressArc = els.current.progressArc;
-      if (!wrapper || !tl) return;
-
+      if (!wrapper) return;
       const rect = wrapper.getBoundingClientRect();
       const scrollable = rect.height - window.innerHeight;
       let progress = scrollable > 0 ? -rect.top / scrollable : 0;
       progress = Math.max(0, Math.min(1, progress));
+      progressState.value = progress * (count - 1);
+      const newActive = Math.round(progressState.value);
+      if (newActive !== active) setActive(newActive);
+    }
 
-      tl.seek(progress * tl.duration);
+    function onScroll() {
+      updateProgress();
+    }
 
-      if (progressArc) {
-        progressArc.style.strokeDashoffset = String(CIRC * (1 - progress));
-      }
-
-      const phaseIdx = Math.min(phases.length - 1, Math.floor(progress * phases.length));
-      const info = phases[phaseIdx];
-      const colorVar = PHASE_COLOR_VAR[info.color];
-
-      if (progressArc) progressArc.style.stroke = colorVar;
-      if (readoutRootRef.current) readoutRootRef.current.style.setProperty('--tj-phase-color', colorVar);
-      if (readoutPhaseRef.current) readoutPhaseRef.current.textContent = info.tag.split('— ')[1] ?? info.tag;
-      if (readoutPctRef.current) readoutPctRef.current.textContent = `${Math.round(progress * 100)}%`;
-
-      copyRefs.current.forEach((el, idx) => {
-        if (!el) return;
-        el.classList.toggle('is-active', idx === phaseIdx);
-      });
-    };
-
-    const onScroll = () => {
-      if (!ticking) {
-        requestAnimationFrame(() => {
-          render();
-          ticking = false;
-        });
-        ticking = true;
-      }
-    };
-
+    window.addEventListener('resize', onResize);
     window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
-    render();
+
+    // initial sizing and start
+    buildScene();
+    updateProgress();
+    rafId = requestAnimationFrame(loop);
 
     return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', onResize);
       window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
     };
-  }, [phases]);
-
-  const liquidGradId = `${uid}-liquidGrad`;
-  const incGlowId = `${uid}-incGlow`;
+  }, [active]);
 
   return (
-    <div className={className} style={{ background: 'var(--tj-bg)' }}>
+    <div>
       <style>{`
-        .tj-root {
-          --tj-bg: #F6F7F5;
-          --tj-panel: #FFFFFF;
-          --tj-line: #E1E5E1;
-          --tj-ink: #1B2420;
-          --tj-ink-dim: #667069;
-          --tj-teal: #0E8E7E;
-          --tj-amber: #C97A12;
-          --tj-violet: #6952C7;
-          --tj-glass-stroke: #B9C2BC;
-          --tj-track: #E1E5E1;
-          --tj-phase-color: var(--tj-teal);
-          position: relative;
-          font-family: "Space Grotesk", "Inter", system-ui, sans-serif;
-          color: var(--tj-ink);
-        }
-        .tj-scrolly { position: relative; height: 600vh; }
-        .tj-sticky {
-          position: sticky;
-          top: 0;
-          height: 100vh;
-          display: grid;
-          grid-template-columns: minmax(240px, 380px) 1fr;
-          align-items: center;
-          overflow: hidden;
-          background: var(--tj-bg);
-        }
-        .tj-copy-col { position: relative; height: 220px; padding-left: 6vw; }
-        .tj-copy {
-          position: absolute;
-          inset: 0 24px 0 0;
-          opacity: 0;
-          transform: translateY(14px);
-          transition: opacity .35s ease, transform .35s ease;
-        }
-        .tj-copy.is-active { opacity: 1; transform: translateY(0); }
-        .tj-copy .tj-tag {
-          display: inline-block;
-          font-family: "IBM Plex Mono", ui-monospace, monospace;
-          font-size: 12px;
-          letter-spacing: 0.02em;
-          color: var(--tj-tag-color, var(--tj-teal));
-          margin-bottom: 12px;
-        }
-        .tj-copy h2 { font-size: clamp(22px, 2.6vw, 30px); line-height: 1.25; margin: 0 0 10px; font-weight: 600; }
-        .tj-copy p { color: var(--tj-ink-dim); font-size: 15px; line-height: 1.6; margin: 0; max-width: 34ch; }
-        .tj-stage-col { position: relative; height: 100%; display: flex; align-items: center; justify-content: center; }
-        .tj-stage-col svg { width: min(64vw, 720px); height: auto; overflow: visible; }
-        .tj-ring-ticks { transform-origin: 450px 400px; animation: tj-spin 90s linear infinite; }
-        @media (prefers-reduced-motion: reduce) {
-          .tj-ring-ticks { animation: none; }
-          .tj-copy { transition: opacity .01s linear; transform: none; }
-        }
-        @keyframes tj-spin { to { transform: rotate(360deg); } }
-        .tj-readout {
-          position: absolute;
-          right: 4vw;
-          bottom: 6vh;
-          width: 236px;
-          padding: 12px 14px;
-          background: var(--tj-panel);
-          border: 1px solid var(--tj-line);
-          border-radius: 6px;
-          font-family: "IBM Plex Mono", ui-monospace, monospace;
-          font-size: 11.5px;
-          line-height: 1.7;
-          color: var(--tj-ink-dim);
-          box-shadow: 0 1px 2px rgba(20, 30, 25, 0.04);
-        }
-        .tj-readout .tj-k { color: var(--tj-phase-color); }
-        .tj-scroll-cue {
-          position: absolute;
-          left: 6vw;
-          bottom: 6vh;
-          font-family: "IBM Plex Mono", ui-monospace, monospace;
-          font-size: 11px;
-          color: var(--tj-ink-dim);
-          letter-spacing: 0.02em;
-        }
-        .tj-arm rect { fill: #4B564F; }
-        .tj-arm .tj-joint { fill: #39423C; }
-        .tj-gripper path { fill: #55645C; }
-        .tj-rig { fill: #4B564F; }
-        .tj-vial-glass { fill: rgba(20, 30, 25, 0.03); stroke: var(--tj-glass-stroke); stroke-width: 2; }
-        .tj-vial-cap { fill: #55645C; }
-        .tj-bubble { fill: #FFFFFF; opacity: 0; }
-        .tj-droplet { opacity: 0; }
-        .tj-incubator-body { fill: var(--tj-panel); stroke: var(--tj-line); stroke-width: 2; }
-        .tj-incubator-door { fill: #ECE7DB; stroke: var(--tj-line); stroke-width: 1.5; }
-        .tj-incubator-glow { opacity: 0; }
-        .tj-culture-dot { opacity: 0; fill: var(--tj-amber); }
-        .tj-scope-body { fill: var(--tj-panel); stroke: var(--tj-line); stroke-width: 2; }
-        .tj-scope-lens { fill: #EFEAE0; stroke: var(--tj-glass-stroke); stroke-width: 1.5; }
-        .tj-focus-ring { fill: none; stroke: var(--tj-violet); opacity: 0; }
+        :root{--ink:#14181b;--paper:#ffffff;--hairline:#e3e1da;--muted:#4b4f52;--dormant:#c9cdce}
+        *{box-sizing:border-box}
+        html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif}
+        .intro{min-height:36vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2rem 1.5rem;border-bottom:1px solid var(--hairline)}
+        .intro .eyebrow{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;letter-spacing:.06em;color:var(--muted);margin-bottom:1rem}
+        .intro h1{font-family:'Newsreader',Georgia,serif;font-weight:500;font-size:clamp(2rem,4.5vw,3.4rem);line-height:1.15;max-width:20ch;margin:0 0 1rem}
+        .intro p{font-family:'Newsreader',Georgia,serif;color:var(--muted);max-width:40ch;line-height:1.6;margin:0}
+        .wrapper{position:relative;width:100%;background:var(--paper)}
+        .sticky-pane{position:sticky;top:0;height:100vh;width:46%;float:left;display:flex;align-items:center;justify-content:center;overflow:hidden}
+        canvas#scene{width:100%;height:100%;display:block}
+        .rail{position:absolute;left:2.5rem;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:2.75rem}
+        .tick{width:6px;height:6px;border-radius:999px;background:#d8d6cf;transition:background-color .5s ease,transform .5s ease,box-shadow .5s ease}
+        .tick.reached{transform:scale(1.6)}
+        .content{width:54%;margin-left:46%}
+        .section{min-height:80vh;display:flex;flex-direction:column;justify-content:center;padding:3.5rem 4.5rem 3.5rem 3rem;border-left:1px solid var(--hairline);opacity:.32;filter:saturate(.6);transform:translateX(4px);transition:opacity .6s ease,transform .6s ease,filter .6s ease,border-color .6s ease}
+        .section.active{opacity:1;filter:saturate(1);transform:translateX(0)}
+        .tag{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;letter-spacing:.06em;color:var(--phase-color,#0e7c7b)}
+        .title{margin:1rem 0 1rem;font-family:'Newsreader',Georgia,serif;font-weight:500;font-size:clamp(1.75rem,3vw,2.6rem);line-height:1.15;color:var(--ink);max-width:26ch}
+        .description{font-family:'Newsreader',Georgia,serif;font-size:1.0625rem;line-height:1.6;color:var(--muted);max-width:46ch}
+        .outro{min-height:30vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:2rem 1.5rem;color:var(--muted)}
+        @media (max-width:860px){.sticky-pane{float:none;width:100%;height:42vh}.rail{left:1.25rem;flex-direction:row;top:auto;bottom:1.25rem;transform:none}.content{width:100%;margin-left:0}.section{min-height:auto;padding:2.25rem 1.5rem}}
       `}</style>
 
-      <div className="tj-root">
-        <div className="tj-scrolly" ref={wrapperRef}>
-          <div className="tj-sticky">
-            <div className="tj-copy-col">
-              {phases.map((phase, idx) => (
-                <div
-                  key={phase.tag}
-                  className="tj-copy"
-                  ref={(el) => {
-                    copyRefs.current[idx] = el;
-                  }}
-                  style={{ '--tj-tag-color': PHASE_COLOR_VAR[phase.color] } as React.CSSProperties}
-                >
-                  <span className="tj-tag">{phase.tag}</span>
-                  <h2>{phase.title}</h2>
-                  <p>{phase.description}</p>
-                </div>
-              ))}
-            </div>
+      <div className="intro">
+        <div className="eyebrow">SCROLL TO BEGIN</div>
+        <h1>The path from patient to trial.</h1>
+        <p>Five phases, one continuous signal. Scroll to trace it.</p>
+      </div>
 
-            <div className="tj-stage-col">
-              <svg viewBox="0 0 900 700" aria-hidden="true">
-                <defs>
-                  <linearGradient id={liquidGradId} x1="0" y1="1" x2="0" y2="0">
-                    <stop offset="0%" stopColor="#0E8E7E" />
-                    <stop offset="100%" stopColor="#6FDFD0" />
-                  </linearGradient>
-                  <radialGradient id={incGlowId} cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stopColor="#C97A12" stopOpacity="0.35" />
-                    <stop offset="100%" stopColor="#C97A12" stopOpacity="0" />
-                  </radialGradient>
-                </defs>
-
-                <g className="tj-ring-ticks">
-                  <circle cx={STAGE_X} cy={STAGE_Y} r={260} fill="none" stroke="#DEE3DE" strokeWidth={1} />
-                  <g ref={setEl('tickGroup')} stroke="#D7DCD6" strokeWidth={2} />
-                </g>
-                <circle cx={STAGE_X} cy={STAGE_Y} r={260} fill="none" stroke="var(--tj-track)" strokeWidth={6} opacity={0.6} />
-                <circle
-                  ref={setEl('progressArc')}
-                  cx={STAGE_X}
-                  cy={STAGE_Y}
-                  r={260}
-                  fill="none"
-                  stroke="var(--tj-teal)"
-                  strokeWidth={6}
-                  strokeLinecap="round"
-                  strokeDasharray={2 * Math.PI * 260}
-                  strokeDashoffset={2 * Math.PI * 260}
-                  transform={`rotate(-90 ${STAGE_X} ${STAGE_Y})`}
-                />
-
-                <g ref={setEl('mixRig')} transform={`translate(${STAGE_X},255)`} opacity={0}>
-                  <rect className="tj-rig" x={-58} y={-10} width={116} height={18} rx={8} />
-                  <rect className="tj-rig" x={-10} y={6} width={6} height={16} rx={2} />
-                  <rect className="tj-rig" x={-3} y={6} width={6} height={16} rx={2} />
-                  <rect className="tj-rig" x={4} y={6} width={6} height={16} rx={2} />
-                </g>
-                <circle ref={setEl('drop1')} className="tj-droplet" cx={STAGE_X - 8} cy={300} r={5} fill="#0E8E7E" />
-                <circle ref={setEl('drop2')} className="tj-droplet" cx={STAGE_X} cy={300} r={5} fill="#3FB4A4" />
-                <circle ref={setEl('drop3')} className="tj-droplet" cx={STAGE_X + 8} cy={300} r={5} fill="#8FDDD0" />
-
-                <g ref={setEl('incubatorGroup')} transform="translate(0,0)">
-                  <rect className="tj-incubator-body" x={390} y={330} width={120} height={180} rx={10} />
-                  <circle ref={setEl('incubatorGlow')} className="tj-incubator-glow" cx={STAGE_X} cy={STAGE_Y + 20} r={80} fill={`url(#${incGlowId})`} />
-                  <rect ref={setEl('incDoor')} className="tj-incubator-door" x={394} y={334} width={112} height={0} rx={6} />
-                </g>
-
-                <g ref={setEl('microscopeGroup')} transform="translate(0,0)">
-                  <rect x={415} y={486} width={70} height={12} rx={4} className="tj-scope-body" />
-                  <rect x={440} y={150} width={20} height={190} className="tj-scope-body" />
-                  <rect x={428} y={120} width={44} height={40} rx={8} className="tj-scope-body" />
-                  <rect x={436} y={90} width={28} height={40} rx={10} className="tj-scope-body" />
-                  <g ref={setEl('turret')} style={{ transformBox: 'fill-box', transformOrigin: `${STAGE_X}px 340px` } as React.CSSProperties}>
-                    <circle cx={STAGE_X} cy={340} r={16} className="tj-scope-lens" />
-                    <circle cx={STAGE_X - 18} cy={352} r={9} className="tj-scope-lens" />
-                    <circle cx={STAGE_X + 18} cy={352} r={9} className="tj-scope-lens" />
-                  </g>
-                  <circle ref={setEl('focusRing1')} className="tj-focus-ring" cx={STAGE_X} cy={STAGE_Y + 20} r={40} />
-                  <circle ref={setEl('focusRing2')} className="tj-focus-ring" cx={STAGE_X} cy={STAGE_Y + 20} r={55} />
-                </g>
-
-                <g ref={setEl('vialGroup')} transform={`translate(${STAGE_X},${STAGE_Y + 12})`} opacity={0}>
-                  <rect className="tj-vial-glass" x={-22} y={0} width={44} height={90} rx={10} />
-                  <rect ref={setEl('vialCap')} className="tj-vial-cap" x={-14} y={-12} width={28} height={14} rx={3} opacity={0} />
-                  <g transform="translate(-22,0)">
-                    <rect ref={setEl('liquidRect')} x={0} y={90} width={44} height={0} fill={`url(#${liquidGradId})`} />
-                  </g>
-                  <circle ref={setEl('bub1')} className="tj-bubble" cx={-6} cy={70} r={2.4} />
-                  <circle ref={setEl('bub2')} className="tj-bubble" cx={4} cy={60} r={2} />
-                  <circle ref={setEl('bub3')} className="tj-bubble" cx={-2} cy={50} r={2.2} />
-                  <circle ref={setEl('cult1')} className="tj-culture-dot" cx={-8} cy={55} r={2.6} />
-                  <circle ref={setEl('cult2')} className="tj-culture-dot" cx={6} cy={65} r={2.2} />
-                  <circle ref={setEl('cult3')} className="tj-culture-dot" cx={0} cy={45} r={2.4} />
-                  <circle ref={setEl('cult4')} className="tj-culture-dot" cx={-4} cy={35} r={2} />
-                </g>
-
-                <g className="tj-arm" transform={`translate(${ARM1_PIVOT.x},${ARM1_PIVOT.y})`}>
-                  <circle className="tj-joint" r={9} />
-                  <g ref={setEl('arm1seg')} style={{ transformBox: 'fill-box', transformOrigin: '0px 0px' } as React.CSSProperties}>
-                    <rect x={0} y={-8} width={158} height={16} rx={8} />
-                    <g
-                      ref={setEl('arm1gripper')}
-                      className="tj-gripper"
-                      transform="translate(158,0)"
-                      style={{ transformBox: 'fill-box', transformOrigin: '0px 0px' } as React.CSSProperties}
-                    >
-                      <path d="M0,-3 L16,-16 L20,-10 L6,1 Z" />
-                      <path d="M0,3 L16,16 L20,10 L6,-1 Z" />
-                    </g>
-                  </g>
-                </g>
-
-                <g className="tj-arm" transform={`translate(${ARM2_PIVOT.x},${ARM2_PIVOT.y})`}>
-                  <circle className="tj-joint" r={9} />
-                  <g ref={setEl('arm2seg')} style={{ transformBox: 'fill-box', transformOrigin: '0px 0px' } as React.CSSProperties}>
-                    <rect x={-158} y={-8} width={158} height={16} rx={8} />
-                    <g
-                      ref={setEl('arm2gripper')}
-                      className="tj-gripper"
-                      transform="translate(-158,0)"
-                      style={{ transformBox: 'fill-box', transformOrigin: '0px 0px' } as React.CSSProperties}
-                    >
-                      <path d="M0,-3 L-16,-16 L-20,-10 L-6,1 Z" />
-                      <path d="M0,3 L-16,16 L-20,10 L-6,-1 Z" />
-                    </g>
-                  </g>
-                </g>
-              </svg>
-
-              <div className="tj-readout" ref={readoutRootRef}>
-                <div>
-                  <span className="tj-k">phase</span>&nbsp;
-                  <span ref={readoutPhaseRef}>formulation</span>
-                </div>
-                <div>
-                  <span className="tj-k">sample</span>&nbsp;{sampleId}
-                </div>
-                <div>
-                  <span className="tj-k">progress</span>&nbsp;
-                  <span ref={readoutPctRef}>0%</span>
-                </div>
-              </div>
-              <div className="tj-scroll-cue">SCROLL ↓</div>
-            </div>
+      <div className="wrapper" id="wrapper" ref={wrapperRef}>
+        <div className="sticky-pane">
+          <canvas id="scene" ref={canvasRef} />
+          <div className="rail" ref={railRef}>
+            {PHASES.map((p, i) => (
+              <div key={p.tag} className={`tick ${i <= active ? 'reached' : ''}`} style={{ ['--tick-color' as any]: COLOR_HEX[p.color] } as React.CSSProperties} />
+            ))}
           </div>
         </div>
+        <div className="content" id="content" ref={contentRef}>
+          {PHASES.map((phase, i) => (
+            <section key={phase.tag} className={`section ${i === active ? 'active' : ''}`} style={{ ['--phase-color' as any]: COLOR_HEX[phase.color] } as React.CSSProperties}>
+              <span className="tag">{phase.tag}</span>
+              <h3 className="title">{phase.title}</h3>
+              <p className="description">{phase.description}</p>
+            </section>
+          ))}
+        </div>
+      </div>
+
+      <div className="outro">
+        <p>End of the journey — scroll back up to watch the signal retrace.</p>
       </div>
     </div>
   );
